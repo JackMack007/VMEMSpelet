@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import Link from 'next/link';
 import LogoutButton from '../components/LogoutButton'; 
-import GroupTable from '../components/GroupTable'; // Importera den nya komponenten
+import GroupTable from '../components/GroupTable'; 
 
 export default function Home() {
   const [teams, setTeams] = useState([]);
@@ -14,10 +14,11 @@ export default function Home() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [totalPoints, setTotalPoints] = useState(0);
   const [actualPlayoffResults, setActualPlayoffResults] = useState([]);
+  const [msg, setMsg] = useState('');
 
   const [openSections, setOpenSections] = useState({ groups: true, playoffs: false, tiebreakers: false });
   const [openGroups, setOpenGroups] = useState({});
-  const [showTable, setShowTable] = useState({}); // State för att visa/dölja tabell per grupp
+  const [showTable, setShowTable] = useState({});
 
   const [groupTips, setGroupTips] = useState({});
   const [playoffPicks, setPlayoffPicks] = useState({
@@ -36,9 +37,9 @@ export default function Home() {
 
   useEffect(() => {
     async function initApp() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { window.location.href = "/login"; return; }
-      setUser(user);
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) { window.location.href = "/login"; return; }
+      setUser(authUser);
 
       try {
         const { data: t } = await supabase.from('teams').select('*').order('group_name').order('name');
@@ -50,9 +51,9 @@ export default function Home() {
         setActualPlayoffResults(resPlayoff || []);
 
         const [predRes, playRes, profRes] = await Promise.all([
-          supabase.from('user_predictions').select('*').eq('user_id', user.id),
-          supabase.from('user_playoff_picks').select('*').eq('user_id', user.id),
-          supabase.from('profiles').select('*').eq('id', user.id).single()
+          supabase.from('user_predictions').select('*').eq('user_id', authUser.id),
+          supabase.from('user_playoff_picks').select('*').eq('user_id', authUser.id),
+          supabase.from('profiles').select('*').eq('id', authUser.id).single()
         ]);
 
         if (profRes.data) {
@@ -73,7 +74,9 @@ export default function Home() {
 
         if (playRes.data) {
           const mappedPlayoff = { '16th': [], '8th': [], 'quarter': [], 'semi': [], 'final': [], 'gold': [] };
-          playRes.data.forEach(p => mappedPlayoff[p.stage].push(p.team_id));
+          playRes.data.forEach(p => {
+            if (mappedPlayoff[p.stage]) mappedPlayoff[p.stage].push(p.team_id.toString());
+          });
           setPlayoffPicks(mappedPlayoff);
         }
 
@@ -87,26 +90,12 @@ export default function Home() {
     initApp();
   }, []);
 
-  const getTeamName = (teamId) => {
-    const team = teams.find(t => t.id === teamId);
-    return team ? team.name : teamId;
-  };
-
-  const formatStaticTime = (dateString) => {
-    if (!dateString) return '';
-    const [date, time] = dateString.split('T');
-    const [year, month, day] = date.split('-');
-    const [hour, minute] = time.split(':');
-    return `${day}/${month} ${hour}:${minute}`;
-  };
-
   const calculatePoints = (userPreds, userPlayoff, allMatches, allTeams, actualPlayoff) => {
     let pts = 0;
     userPreds?.forEach(pred => {
       const match = allMatches.find(m => m.id === pred.match_id);
       if (match && match.actual_result === pred.prediction) {
-        const pointKey = `points_${pred.prediction.toLowerCase()}`;
-        pts += match[pointKey] || 0;
+        pts += match[`points_${pred.prediction.toLowerCase()}`] || 0;
       }
     });
     userPlayoff?.forEach(pick => {
@@ -119,42 +108,87 @@ export default function Home() {
     setTotalPoints(pts);
   };
 
+  const handleGroupTip = async (matchId, val) => {
+    if (isLocked) return;
+    setGroupTips(prev => ({ ...prev, [matchId]: val }));
+    await supabase.from('user_predictions').upsert({
+      user_id: user.id, match_id: matchId, prediction: val
+    }, { onConflict: 'user_id,match_id' });
+  };
+
   const togglePlayoffTeam = (stage, teamId, maxCount) => {
-    if (isLocked && !isAdmin) return;
+    if (isLocked) return;
+    const teamIdStr = teamId.toString();
     setPlayoffPicks(prev => {
-      const current = prev[stage];
-      if (current.includes(teamId)) return { ...prev, [stage]: current.filter(id => id !== teamId) };
-      if (current.length < maxCount) return { ...prev, [stage]: [...current, teamId] };
+      const current = prev[stage] || [];
+      if (current.includes(teamIdStr)) return { ...prev, [stage]: current.filter(id => id !== teamIdStr) };
+      if (current.length < maxCount) return { ...prev, [stage]: [...current, teamIdStr] };
       return prev;
     });
   };
 
-  const toggleGroup = (group) => {
-    setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }));
+  const handleSave = async () => {
+    setLoading(true);
+    setMsg("Sparar...");
+    try {
+      await supabase.from('user_playoff_picks').delete().eq('user_id', user.id);
+      const picksToInsert = [];
+      Object.keys(playoffPicks).forEach(stage => {
+        playoffPicks[stage].forEach(teamId => {
+          picksToInsert.push({ user_id: user.id, stage, team_id: teamId });
+        });
+      });
+      if (picksToInsert.length > 0) await supabase.from('user_playoff_picks').insert(picksToInsert);
+      await supabase.from('profiles').update({
+        tiebreaker_bronze: tiebreakers.bronze,
+        tiebreaker_top_scorer: tiebreakers.scorer,
+        tiebreaker_total_goals: parseInt(tiebreakers.goals) || 0
+      }).eq('id', user.id);
+      setMsg("Allt sparat!");
+      setTimeout(() => setMsg(''), 2000);
+    } catch (err) { setMsg("Fel: " + err.message); }
+    finally { setLoading(false); }
   };
 
-  if (loading) return <div style={{ padding: '20px', textAlign: 'center' }}>Laddar tipsarenan...</div>;
+  const handleLock = async () => {
+    if (!confirm("Är du säker att du vill skicka in ditt tips? Du kan inte ändra efter att du har skickat in.")) return;
+    await handleSave();
+    const { error } = await supabase.from('profiles').update({ is_submitted: true }).eq('id', user.id);
+    if (!error) setIsLocked(true);
+  };
+
+  const getTeamName = (teamId) => teams.find(t => t.id.toString() === teamId.toString())?.name || teamId;
+  const formatStaticTime = (dateString) => {
+    if (!dateString) return '';
+    const [date, time] = dateString.split('T');
+    const [y, m, d] = date.split('-');
+    const [hh, mm] = time.split(':');
+    return `${d}/${m} ${hh}:${mm}`;
+  };
+
+  if (loading) return <div style={{ padding: '50px', textAlign: 'center' }}>Laddar...</div>;
 
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '15px', fontFamily: '-apple-system, sans-serif', paddingBottom: '100px' }}>
-      <header style={{ textAlign: 'center', marginBottom: '20px', padding: '15px', backgroundColor: '#f1f5f9', borderRadius: '12px', position: 'relative' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '15px', fontFamily: 'sans-serif', paddingBottom: '120px' }}>
+      <header style={{ textAlign: 'center', marginBottom: '20px', padding: '15px', backgroundColor: '#f1f5f9', borderRadius: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
             <h1 style={{ fontSize: '1.2rem', margin: 0 }}>VM 2026 Tips</h1>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{user?.email.split('@')[0]}</span>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{user?.email}</span>
           </div>
           <LogoutButton />
         </div>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '10px' }}>
-          <Link href="/leaderboard" style={{ padding: '8px 15px', backgroundColor: '#2563eb', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.9rem' }}>🏆 Rank</Link>
-          {isAdmin && <Link href="/admin" style={{ marginLeft: '10px', padding: '8px 15px', backgroundColor: '#64748b', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.9rem' }}>⚙️ Admin</Link>}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', margin: '15px 0' }}>
+          <Link href="/leaderboard" style={{ padding: '8px 15px', backgroundColor: '#2563eb', color: '#fff', textDecoration: 'none', borderRadius: '8px' }}>🏆 Rank</Link>
+          {isAdmin && <Link href="/admin" style={{ padding: '8px 15px', backgroundColor: '#64748b', color: '#fff', textDecoration: 'none', borderRadius: '8px' }}>⚙️ Admin</Link>}
         </div>
-        <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2563eb' }}>Dina poäng: {totalPoints}</div>
-        {isLocked && <div style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '0.8rem', marginTop: '5px' }}>DITT TIPS ÄR LÅST</div>}
+        <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>Poäng: {totalPoints}</div>
+        {isLocked && <div style={{ color: 'red', fontWeight: 'bold', marginTop: '5px' }}>LÅST</div>}
+        {msg && <div style={{ color: '#2563eb', marginTop: '5px', fontSize: '0.8rem' }}>{msg}</div>}
       </header>
 
       {/* 1. GRUPPSPEL */}
-      <div style={{ marginBottom: '10px' }}>
+      <section style={{ marginBottom: '10px' }}>
         <button onClick={() => setOpenSections(p => ({ ...p, groups: !p.groups }))} style={{ width: '100%', padding: '15px', textAlign: 'left', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '8px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
           1. Gruppspel {openSections.groups ? '▲' : '▼'}
         </button>
@@ -162,50 +196,39 @@ export default function Home() {
           <div style={{ marginTop: '10px' }}>
             {[...new Set(teams.map(t => t.group_name))].sort().map(group => (
               <div key={group} style={{ marginBottom: '5px' }}>
-                <button onClick={() => toggleGroup(group)} style={{ width: '100%', padding: '10px', textAlign: 'left', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.9rem' }}>
+                <button onClick={() => setOpenGroups(p => ({ ...p, [group]: !p[group] }))} style={{ width: '100%', padding: '10px', textAlign: 'left', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
                   {group} {openGroups[group] ? '−' : '+'}
                 </button>
                 {openGroups[group] && (
-                  <div style={{ padding: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 6px 6px' }}>
-                    
-                    {/* Knapp för att visa den externa tabellkomponenten */}
-                    <button 
-                      onClick={() => setShowTable(p => ({ ...p, [group]: !p[group] }))}
-                      style={{ width: '100%', padding: '8px', backgroundColor: '#eff6ff', color: '#2563eb', border: '1px dashed #2563eb', borderRadius: '6px', marginBottom: '15px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
-                    >
-                      {showTable[group] ? 'Dölj Tabell' : 'Visa Tabell & Ställning'}
+                  <div style={{ padding: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <button onClick={() => setShowTable(p => ({ ...p, [group]: !p[group] }))} style={{ width: '100%', padding: '8px', backgroundColor: '#eff6ff', color: '#2563eb', border: '1px dashed #2563eb', borderRadius: '6px', marginBottom: '10px' }}>
+                      {showTable[group] ? 'Dölj Tabell' : 'Visa Tabell'}
                     </button>
-
-                    {showTable[group] && (
-                      <GroupTable groupName={group} teams={teams} matches={matches} />
-                    )}
-
+                    {showTable[group] && <GroupTable groupName={group} teams={teams} matches={matches} />}
                     {matches.filter(m => teams.find(t => t.id === m.home_team)?.group_name === group).map(match => {
                       const userPick = groupTips[match.id];
-                      const actualResult = match.actual_result;
-                      const isFinished = !!actualResult;
+                      const actual = match.actual_result;
+                      const finished = !!actual;
                       return (
-                        <div key={match.id} style={{ marginBottom: '15px', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{formatStaticTime(match.match_date)}</div>
-                            {isFinished && <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#16a34a' }}>Slut: {match.score_text} ({actualResult})</div>}
+                        <div key={match.id} style={{ marginBottom: '15px', borderBottom: '1px solid #eee' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                             <div style={{ fontSize: '0.7rem' }}>{formatStaticTime(match.match_date)}</div>
+                             {finished && <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#16a34a' }}>Slut: {match.score_text} ({actual})</div>}
                           </div>
-                          <div style={{ fontWeight: '500', margin: '5px 0' }}>{getTeamName(match.home_team)} - {getTeamName(match.away_team)}</div>
-                          <div style={{ display: 'flex', gap: '8px' }}>
+                          <div style={{ fontWeight: '500' }}>{getTeamName(match.home_team)} - {getTeamName(match.away_team)}</div>
+                          <div style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
                             {['1', 'X', '2'].map(val => {
                               const isPicked = userPick === val;
-                              const isCorrect = actualResult === val;
-                              let bg = '#fff', text = '#000', border = '1px solid #cbd5e0';
-                              
+                              const isCorrect = actual === val;
+                              let bg = '#fff', text = '#000';
                               if (isPicked) {
-                                if (!isFinished) { bg = '#2563eb'; text = '#fff'; border = '1px solid #2563eb'; }
-                                else { bg = isCorrect ? '#16a34a' : '#dc2626'; text = '#fff'; border = `1px solid ${isCorrect ? '#16a34a' : '#dc2626'}`; }
-                              } else if (isFinished && isCorrect) { bg = '#f0fdf4'; text = '#16a34a'; border = '1px solid #16a34a'; }
-
+                                if (!finished) { bg = '#2563eb'; text = '#fff'; }
+                                else { bg = isCorrect ? '#16a34a' : '#dc2626'; text = '#fff'; }
+                              } else if (finished && isCorrect) {
+                                bg = '#f0fdf4'; text = '#16a34a';
+                              }
                               return (
-                                <button key={val} 
-                                  onClick={() => !isLocked && setGroupTips(prev => ({ ...prev, [match.id]: val }))} 
-                                  style={{ flex: 1, padding: '8px', borderRadius: '6px', border: border, backgroundColor: bg, color: text, fontSize: '0.8rem', fontWeight: isPicked ? 'bold' : 'normal', cursor: isLocked ? 'default' : 'pointer', opacity: 1 }}>
+                                <button key={val} onClick={() => handleGroupTip(match.id, val)} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e0', backgroundColor: bg, color: text, cursor: isLocked ? 'default' : 'pointer' }}>
                                   {val} ({match[`points_${val.toLowerCase()}`]}p)
                                 </button>
                               );
@@ -220,10 +243,10 @@ export default function Home() {
             ))}
           </div>
         )}
-      </div>
+      </section>
 
-      {/* 2. SLUTSPEL */}
-      <div style={{ marginBottom: '10px' }}>
+      {/* 2. SLUTSPEL - Med återställd färglogik */}
+      <section style={{ marginBottom: '10px' }}>
         <button onClick={() => setOpenSections(p => ({ ...p, playoffs: !p.playoffs }))} style={{ width: '100%', padding: '15px', textAlign: 'left', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '8px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
           2. Slutspel {openSections.playoffs ? '▲' : '▼'}
         </button>
@@ -231,24 +254,34 @@ export default function Home() {
           <div style={{ marginTop: '10px' }}>
             {STAGES.map(stage => (
               <div key={stage.id} style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#f0f9ff', borderRadius: '8px' }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>{stage.label} ({stage.count})</h4>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>{stage.label} ({playoffPicks[stage.id]?.length || 0}/{stage.count})</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
                   {teams.map(team => {
-                    const isSelected = playoffPicks[stage.id]?.map(id => id.toString()).includes(team.id.toString());
+                    const isSelected = playoffPicks[stage.id]?.includes(team.id.toString());
                     const isActuallyAdvancing = actualPlayoffResults.some(r => r.stage === stage.id && r.team_id.toString() === team.id.toString());
                     const stageHasAnyResults = actualPlayoffResults.some(r => r.stage === stage.id);
+                    
                     let bg = '#fff', text = '#000', border = '1px solid #bae6fd';
 
                     if (isSelected) {
-                      if (isActuallyAdvancing) { bg = '#16a34a'; text = '#fff'; border = '1px solid #16a34a'; }
-                      else { bg = '#2563eb'; text = '#fff'; border = '1px solid #2563eb'; }
+                      if (stageHasAnyResults) {
+                        bg = isActuallyAdvancing ? '#16a34a' : '#2563eb';
+                        text = '#fff';
+                        border = isActuallyAdvancing ? '1px solid #16a34a' : '1px solid #2563eb';
+                      } else {
+                        bg = '#2563eb';
+                        text = '#fff';
+                        border = '1px solid #2563eb';
+                      }
                     } else if (stageHasAnyResults && isActuallyAdvancing) {
-                      bg = '#fef2f2'; text = '#dc2626'; border = '2px solid #dc2626';
+                      bg = 'rgba(220, 38, 38, 0.1)'; 
+                      text = '#dc2626';
+                      border = '1px dashed #dc2626';
                     }
 
                     return (
                       <button key={team.id} onClick={() => togglePlayoffTeam(stage.id, team.id, stage.count)} 
-                        style={{ padding: '6px 2px', borderRadius: '4px', border: border, fontSize: '0.7rem', backgroundColor: bg, color: text, cursor: isLocked ? 'default' : 'pointer', opacity: 1 }}>
+                        style={{ padding: '6px 2px', borderRadius: '4px', border: border, fontSize: '0.7rem', backgroundColor: bg, color: text, cursor: isLocked ? 'default' : 'pointer' }}>
                         {team.name} ({team[`points_${stage.id}`] || 0}p)
                       </button>
                     );
@@ -258,34 +291,32 @@ export default function Home() {
             ))}
           </div>
         )}
-      </div>
+      </section>
 
       {/* 3. SPECIALARE */}
-      <div style={{ marginBottom: '30px' }}>
+      <section style={{ marginBottom: '10px' }}>
         <button onClick={() => setOpenSections(p => ({ ...p, tiebreakers: !p.tiebreakers }))} style={{ width: '100%', padding: '15px', textAlign: 'left', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '8px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
           3. Specialare {openSections.tiebreakers ? '▲' : '▼'}
         </button>
         {openSections.tiebreakers && (
-          <div style={{ padding: '15px', backgroundColor: '#fffbeb', borderRadius: '0 0 8px 8px', border: '1px solid #fde68a' }}>
-               <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Bronsvinnare</label>
-               <select disabled={isLocked} value={tiebreakers.bronze} onChange={e => setTiebreakers({...tiebreakers, bronze: e.target.value})} style={{ width: '100%', padding: '10px', marginBottom: '10px', color: '#000' }}>
-                 <option value="">Välj...</option>
-                 {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-               </select>
-               <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Skyttekung</label>
-               <input disabled={isLocked} type="text" value={tiebreakers.scorer} onChange={e => setTiebreakers({...tiebreakers, scorer: e.target.value})} style={{ width: '100%', padding: '10px', marginBottom: '10px', color: '#000' }} />
-               <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Totala mål</label>
-               <input disabled={isLocked} type="number" value={tiebreakers.goals} onChange={e => setTiebreakers({...tiebreakers, goals: e.target.value})} style={{ width: '100%', padding: '10px', color: '#000' }} />
+          <div style={{ padding: '15px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0 0 8px 8px' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 'bold' }}>Bronsvinnare</label>
+            <select disabled={isLocked} value={tiebreakers.bronze} onChange={e => setTiebreakers({...tiebreakers, bronze: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '10px', color: '#000' }}>
+              <option value="">Välj...</option>
+              {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 'bold' }}>Skyttekung</label>
+            <input disabled={isLocked} type="text" value={tiebreakers.scorer} onChange={e => setTiebreakers({...tiebreakers, scorer: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '10px', color: '#000' }} />
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 'bold' }}>Totala mål</label>
+            <input disabled={isLocked} type="number" value={tiebreakers.goals} onChange={e => setTiebreakers({...tiebreakers, goals: e.target.value})} style={{ width: '100%', padding: '8px', color: '#000' }} />
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Footer-knappar för spara/låsa */}
       {!isLocked && (
-        <div style={{ display: 'flex', gap: '10px', position: 'fixed', bottom: '0', left: '0', right: '0', padding: '15px', backgroundColor: '#fff', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', zIndex: 100 }}>
-          {/* Sparlogik som i V1.5... */}
-          <button onClick={() => {/* ... sparlogik ... */}} style={{ flex: 1, padding: '12px', backgroundColor: '#64748b', color: '#fff', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.8rem' }}>SPARA</button>
-          <button onClick={() => {/* ... låslogik ... */}} style={{ flex: 1, padding: '12px', backgroundColor: '#1e3a8a', color: '#fff', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.8rem' }}>LÅS TIPS</button>
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '15px', backgroundColor: '#fff', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', display: 'flex', gap: '10px', zIndex: 100 }}>
+          <button onClick={handleSave} style={{ flex: 1, padding: '12px', backgroundColor: '#64748b', color: '#fff', borderRadius: '8px', fontWeight: 'bold' }}>SPARA</button>
+          <button onClick={handleLock} style={{ flex: 1, padding: '12px', backgroundColor: '#1e3a8a', color: '#fff', borderRadius: '8px', fontWeight: 'bold' }}>LÅS TIPS</button>
         </div>
       )}
     </div>
