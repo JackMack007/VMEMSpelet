@@ -40,7 +40,7 @@ export default function Login() {
         if (signUpError) throw signUpError;
         
         if (data.user) {
-          setMsg("Konto skapat! Bekräfta din mejl (kolla även skräppost) och logga sedan in.");
+          setMsg("Du kan nu logga in. Välkommen!");
         }
       } else {
         // Inloggningslogik

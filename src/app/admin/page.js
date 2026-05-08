@@ -216,6 +216,16 @@ export default function AdminDashboard() {
             <div>
               <h4>Matcher</h4>
               <table style={{ width: '100%', marginBottom: '20px' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', fontSize: '0.75rem', color: '#64748b' }}>
+                    <th>ID</th>
+                    <th>Tid</th>
+                    <th>Match</th>
+                    <th style={{ textAlign: 'center' }}>1 - X - 2</th>
+                    <th>Resultat</th>
+                    <th></th>
+                  </tr>
+                </thead>
                 <tbody>
                   {matches
                     .filter(m => teams.find(t => t.id === m.home_team)?.group_name === group)
@@ -223,7 +233,7 @@ export default function AdminDashboard() {
                     .map(m => (
                     <tr key={m.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       {editingMatch?.id === m.id ? (
-                        <td colSpan="4">
+                        <td colSpan="6">
                           <div style={{ display: 'grid', gap: '5px', padding: '10px', background: '#f8fafc' }}>
                             <select value={editingMatch.home_team || ''} onChange={e => setEditingMatch({...editingMatch, home_team: e.target.value})}>
                               {teams.filter(t => t.group_name === group).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -245,10 +255,14 @@ export default function AdminDashboard() {
                         <>
                           <td style={{ fontSize: '0.8rem', width: '30px' }}>{m.id}</td>
                           <td style={{ fontSize: '0.85rem', width: '100px' }}>{formatStaticTime(m.match_date)}</td>
-                          <td>{m.home_team} vs {m.away_team}</td>
+                          <td style={{ fontWeight: '500' }}>{m.home_team} - {m.away_team}</td>
+                          {/* NY KOLUMN FÖR POÄNG */}
+                          <td style={{ textAlign: 'center', fontSize: '0.85rem', color: '#2563eb' }}>
+                            {m.points_1} - {m.points_x} - {m.points_2}
+                          </td>
                           <td>
                             <input 
-                              placeholder="Mål" 
+                              placeholder="0-0" 
                               defaultValue={m.score_text || ''} 
                               onBlur={(e) => handleUpdateMatchScore(m.id, e.target.value)} 
                               style={{ width: '40px', textAlign: 'center' }} 
