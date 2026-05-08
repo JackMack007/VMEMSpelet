@@ -13,6 +13,10 @@ export default function Home() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [totalPoints, setTotalPoints] = useState(0);
 
+  // State för Accordions
+  const [openSections, setOpenSections] = useState({ groups: true, playoffs: false, tiebreakers: false });
+  const [openGroups, setOpenGroups] = useState({});
+
   const [groupTips, setGroupTips] = useState({});
   const [playoffPicks, setPlayoffPicks] = useState({
     '16th': [], '8th': [], 'quarter': [], 'semi': [], 'final': [], 'gold': []
@@ -20,7 +24,7 @@ export default function Home() {
   const [tiebreakers, setTiebreakers] = useState({ bronze: '', scorer: '', goals: '' });
 
   const STAGES = [
-    { id: '16th', label: 'Sextondelsfinal', count: 32 },
+    { id: '16th', label: '16-delsfinal', count: 32 },
     { id: '8th', label: 'Åttondelsfinal', count: 16 },
     { id: 'quarter', label: 'Kvartsfinal', count: 8 },
     { id: 'semi', label: 'Semifinal', count: 4 },
@@ -80,6 +84,12 @@ export default function Home() {
     }
     initApp();
   }, []);
+
+  // Helper för att hämta lagnamn baserat på ID
+  const getTeamName = (teamId) => {
+    const team = teams.find(t => t.id === teamId);
+    return team ? team.name : teamId;
+  };
 
   const formatStaticTime = (dateString) => {
     if (!dateString) return '';
@@ -158,140 +168,153 @@ export default function Home() {
 
   const uniqueGroups = [...new Set(teams.map(t => t.group_name))].sort();
 
-  if (loading) return <div style={{ padding: '50px' }}>Laddar tipsarenan...</div>;
+  const toggleGroup = (group) => {
+    setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }));
+  };
+
+  if (loading) return <div style={{ padding: '20px', textAlign: 'center' }}>Laddar tipsarenan...</div>;
 
   return (
-    <div style={{ maxWidth: '950px', margin: '0 auto', padding: '40px', fontFamily: 'sans-serif' }}>
-      <header style={{ textAlign: 'center', marginBottom: '40px', padding: '20px', backgroundColor: '#f1f5f9', borderRadius: '15px', position: 'relative' }}>
-        <div style={{ position: 'absolute', top: '10px', right: '10px' }}>
+    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '15px', fontFamily: '-apple-system, sans-serif', paddingBottom: '100px' }}>
+      <header style={{ 
+        textAlign: 'center', 
+        marginBottom: '20px', 
+        padding: '15px', 
+        backgroundColor: '#f1f5f9', 
+        borderRadius: '12px', 
+        position: 'relative' 
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <div style={{ textAlign: 'left' }}>
+            <h1 style={{ fontSize: '1.2rem', margin: 0 }}>VM 2026 Tips</h1>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{user?.email.split('@')[0]}</span>
+          </div>
           <LogoutButton />
         </div>
-        
-        <h1>VM 2026 Tips</h1>
-        <div style={{ marginBottom: '15px' }}>
-          <Link href="/leaderboard" style={{ padding: '10px 20px', backgroundColor: '#2563eb', color: '#fff', textDecoration: 'none', borderRadius: '8px' }}>Leaderboard 🏆</Link>
-          {isAdmin && <Link href="/admin" style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#64748b', color: '#fff', textDecoration: 'none', borderRadius: '8px' }}>Admin ⚙️</Link>}
+
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '10px' }}>
+          <Link href="/leaderboard" style={{ padding: '8px 15px', backgroundColor: '#2563eb', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontSize: '0.9rem' }}>🏆 Rank</Link>
+          {isAdmin && <Link href="/admin" style={{ padding: '8px 15px', backgroundColor: '#64748b', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontSize: '0.9rem' }}>⚙️ Admin</Link>}
         </div>
-        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#2563eb' }}>Dina poäng: {totalPoints}</div>
-        <p>Inloggad som: {user?.email}</p>
-        {isLocked && <div style={{ color: 'red', fontWeight: 'bold', marginTop: '10px' }}>DITT TIPS ÄR LÅST</div>}
+
+        <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2563eb' }}>Dina poäng: {totalPoints}</div>
+        {isLocked && <div style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '0.8rem', marginTop: '5px' }}>LÅST TILLSTÅND</div>}
       </header>
 
-      <section style={{ marginBottom: '60px', pointerEvents: isLocked ? 'none' : 'auto' }}>
-        <h2 style={{ borderBottom: '3px solid #2563eb', paddingBottom: '10px' }}>1. Gruppspel</h2>
-        {uniqueGroups.map(group => (
-          <div key={group} style={{ marginBottom: '30px', padding: '20px', border: '1px solid #e2e8f0', borderRadius: '12px', backgroundColor: '#fff' }}>
-            <h3 style={{ color: '#1e3a8a', marginTop: 0 }}>{group}</h3>
-            <div style={{ display: 'grid', gap: '15px' }}>
-              {matches
-                .filter(m => teams.find(t => t.id === m.home_team)?.group_name === group)
-                .sort((a, b) => a.match_date.localeCompare(b.match_date))
-                .map(match => (
-                <div key={match.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>
-                      {formatStaticTime(match.match_date)}
-                    </div>
-                    <span style={{ fontWeight: 'bold' }}>{match.home_team} vs {match.away_team}</span>
-                    {match.score_text && <span style={{ marginLeft: '10px', color: '#16a34a', fontWeight: 'bold' }}>({match.score_text})</span>}
-                  </div>
-                  
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    {['1', 'X', '2'].map(val => (
-                      <div key={val} style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{match[`points_${val.toLowerCase()}`]}p</div>
-                        <button onClick={() => setGroupTips(prev => ({ ...prev, [match.id]: val }))}
-                          style={{ 
-                            width: '40px', height: '40px', borderRadius: '6px', border: '1px solid #cbd5e0',
-                            backgroundColor: groupTips[match.id] === val ? '#2563eb' : '#fff', 
-                            color: groupTips[match.id] === val ? '#fff' : '#000',
-                            cursor: 'pointer'
-                          }}>{val}</button>
-                      </div>
+      {/* SEKTION 1: GRUPPSPEL */}
+      <div style={{ marginBottom: '10px' }}>
+        <button 
+          onClick={() => setOpenSections(p => ({ ...p, groups: !p.groups }))}
+          style={{ width: '100%', padding: '15px', textAlign: 'left', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}
+        >
+          1. Gruppspel {openSections.groups ? '▲' : '▼'}
+        </button>
+        
+        {openSections.groups && (
+          <div style={{ marginTop: '10px', pointerEvents: isLocked ? 'none' : 'auto' }}>
+            {uniqueGroups.map(group => (
+              <div key={group} style={{ marginBottom: '5px' }}>
+                <button 
+                  onClick={() => toggleGroup(group)}
+                  style={{ width: '100%', padding: '10px', textAlign: 'left', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.9rem' }}
+                >
+                  {group} {openGroups[group] ? '−' : '+'}
+                </button>
+                {openGroups[group] && (
+                  <div style={{ padding: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 6px 6px' }}>
+                    {matches
+                      .filter(m => teams.find(t => t.id === m.home_team)?.group_name === group)
+                      .map(match => (
+                        <div key={match.id} style={{ marginBottom: '15px', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{formatStaticTime(match.match_date)}</div>
+                          <div style={{ fontWeight: '500', margin: '5px 0' }}>
+                            {getTeamName(match.home_team)} - {getTeamName(match.away_team)}
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            {['1', 'X', '2'].map(val => (
+                              <button key={val} onClick={() => setGroupTips(prev => ({ ...prev, [match.id]: val }))}
+                                style={{ 
+                                  flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e0',
+                                  backgroundColor: groupTips[match.id] === val ? '#2563eb' : '#fff',
+                                  color: groupTips[match.id] === val ? '#fff' : '#000',
+                                  fontSize: '0.8rem'
+                                }}>{val} ({match[`points_${val.toLowerCase()}`]}p)</button>
+                            ))}
+                          </div>
+                        </div>
                     ))}
                   </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* SEKTION 2: SLUTSPEL */}
+      <div style={{ marginBottom: '10px' }}>
+        <button 
+          onClick={() => setOpenSections(p => ({ ...p, playoffs: !p.playoffs }))}
+          style={{ width: '100%', padding: '15px', textAlign: 'left', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}
+        >
+          2. Slutspel {openSections.playoffs ? '▲' : '▼'}
+        </button>
+
+        {openSections.playoffs && (
+          <div style={{ marginTop: '10px', pointerEvents: isLocked ? 'none' : 'auto' }}>
+            {STAGES.map(stage => (
+              <div key={stage.id} style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#f0f9ff', borderRadius: '8px' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>{stage.label} ({stage.count})</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                  {teams.map(team => {
+                    const isSelected = playoffPicks[stage.id].includes(team.id);
+                    return (
+                      <button 
+                        key={team.id} 
+                        onClick={() => togglePlayoffTeam(stage.id, team.id, stage.count)}
+                        style={{ 
+                          padding: '6px 2px', borderRadius: '4px', border: '1px solid #bae6fd', fontSize: '0.7rem',
+                          backgroundColor: isSelected ? '#16a34a' : '#fff', color: isSelected ? '#fff' : '#000'
+                        }}
+                      >
+                        {team.name} ({team[`points_${stage.id}`] || 0}p)
+                      </button>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </section>
+        )}
+      </div>
 
-      {/* Oppdatert Sluttspill-seksjon med poeng/odds */}
-      <section style={{ marginBottom: '60px', pointerEvents: isLocked ? 'none' : 'auto' }}>
-        <h2 style={{ borderBottom: '3px solid #2563eb', paddingBottom: '10px' }}>2. Slutspel</h2>
-        {STAGES.map(stage => (
-          <div key={stage.id} style={{ marginTop: '25px', padding: '20px', backgroundColor: '#f0f9ff', borderRadius: '12px' }}>
-            <h3 style={{ marginTop: 0 }}>{stage.label} (Välj {stage.count})</h3>
-            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '15px' }}>
-              Klicka på ett lag för att välja det. Siffran visar poängen du får om laget går vidare.
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
-              {teams.map(team => {
-                const isSelected = playoffPicks[stage.id].includes(team.id);
-                const stagePoints = team[`points_${stage.id}`] || 0;
-
-                return (
-                  <button 
-                    key={team.id} 
-                    onClick={() => togglePlayoffTeam(stage.id, team.id, stage.count)}
-                    style={{ 
-                      padding: '10px', 
-                      borderRadius: '8px', 
-                      border: '1px solid #bae6fd',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '4px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      backgroundColor: isSelected ? '#16a34a' : '#fff', 
-                      color: isSelected ? '#fff' : '#000' 
-                    }}
-                  >
-                    <span style={{ fontWeight: 'bold' }}>{team.name}</span>
-                    <span style={{ 
-                      fontSize: '0.75rem', 
-                      opacity: 0.9, 
-                      backgroundColor: isSelected ? 'rgba(0,0,0,0.2)' : '#f1f5f9',
-                      padding: '2px 6px',
-                      borderRadius: '4px'
-                    }}>
-                      {stagePoints}p
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+      {/* SEKTION 3: SPECIALARE */}
+      <div style={{ marginBottom: '30px' }}>
+        <button 
+          onClick={() => setOpenSections(p => ({ ...p, tiebreakers: !p.tiebreakers }))}
+          style={{ width: '100%', padding: '15px', textAlign: 'left', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}
+        >
+          3. Specialare {openSections.tiebreakers ? '▲' : '▼'}
+        </button>
+        {openSections.tiebreakers && (
+          <div style={{ padding: '15px', backgroundColor: '#fffbeb', borderRadius: '0 0 8px 8px', border: '1px solid #fde68a', pointerEvents: isLocked ? 'none' : 'auto' }}>
+             <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Bronsvinnare</label>
+             <select value={tiebreakers.bronze} onChange={e => setTiebreakers({...tiebreakers, bronze: e.target.value})} style={{ width: '100%', padding: '10px', marginBottom: '10px' }}>
+               <option value="">Välj...</option>
+               {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+             </select>
+             <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Skyttekung</label>
+             <input type="text" value={tiebreakers.scorer} onChange={e => setTiebreakers({...tiebreakers, scorer: e.target.value})} style={{ width: '100%', padding: '10px', marginBottom: '10px' }} />
+             <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Totala mål</label>
+             <input type="number" value={tiebreakers.goals} onChange={e => setTiebreakers({...tiebreakers, goals: e.target.value})} style={{ width: '100%', padding: '10px' }} />
           </div>
-        ))}
-      </section>
-
-      <section style={{ marginBottom: '50px', padding: '30px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', pointerEvents: isLocked ? 'none' : 'auto' }}>
-        <h2 style={{ marginTop: 0 }}>3. Utslagsfrågor</h2>
-        <div style={{ display: 'grid', gap: '20px' }}>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold' }}>Bronsvinnare:</label>
-            <select value={tiebreakers.bronze} onChange={e => setTiebreakers({...tiebreakers, bronze: e.target.value})} style={{ width: '100%', padding: '12px', marginTop: '5px' }}>
-              <option value="">Välj lag...</option>
-              {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold' }}>Skyttekung:</label>
-            <input type="text" value={tiebreakers.scorer} onChange={e => setTiebreakers({...tiebreakers, scorer: e.target.value})} style={{ width: '100%', padding: '12px', marginTop: '5px' }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold' }}>Totalt antal mål i turneringen:</label>
-            <input type="number" value={tiebreakers.goals} onChange={e => setTiebreakers({...tiebreakers, goals: e.target.value})} style={{ width: '100%', padding: '12px', marginTop: '5px' }} />
-          </div>
-        </div>
-      </section>
+        )}
+      </div>
 
       {!isLocked && (
-        <div style={{ display: 'flex', gap: '20px', marginBottom: '50px' }}>
-          <button onClick={() => saveTips(false)} style={{ flex: 1, padding: '20px', backgroundColor: '#64748b', color: '#fff', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>SPARA UTKAST</button>
-          <button onClick={() => saveTips(true)} style={{ flex: 1, padding: '20px', backgroundColor: '#1e3a8a', color: '#fff', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>SKICKA IN OCH LÅS</button>
+        <div style={{ display: 'flex', gap: '10px', position: 'fixed', bottom: '0', left: '0', right: '0', padding: '15px', backgroundColor: '#fff', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', zIndex: 100 }}>
+          <button onClick={() => saveTips(false)} style={{ flex: 1, padding: '12px', backgroundColor: '#64748b', color: '#fff', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.8rem' }}>SPARA</button>
+          <button onClick={() => saveTips(true)} style={{ flex: 1, padding: '12px', backgroundColor: '#1e3a8a', color: '#fff', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.8rem' }}>LÅS TIPS</button>
         </div>
       )}
     </div>
