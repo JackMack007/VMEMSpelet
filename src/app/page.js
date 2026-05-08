@@ -13,7 +13,6 @@ export default function Home() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [totalPoints, setTotalPoints] = useState(0);
 
-  // State för Accordions
   const [openSections, setOpenSections] = useState({ groups: true, playoffs: false, tiebreakers: false });
   const [openGroups, setOpenGroups] = useState({});
 
@@ -85,7 +84,6 @@ export default function Home() {
     initApp();
   }, []);
 
-  // Helper för att hämta lagnamn baserat på ID
   const getTeamName = (teamId) => {
     const team = teams.find(t => t.id === teamId);
     return team ? team.name : teamId;
@@ -198,7 +196,7 @@ export default function Home() {
         </div>
 
         <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2563eb' }}>Dina poäng: {totalPoints}</div>
-        {isLocked && <div style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '0.8rem', marginTop: '5px' }}>LÅST TILLSTÅND</div>}
+        {isLocked && <div style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '0.8rem', marginTop: '5px' }}>DITT TIPS ÄR LÅST</div>}
       </header>
 
       {/* SEKTION 1: GRUPPSPEL */}
@@ -211,7 +209,7 @@ export default function Home() {
         </button>
         
         {openSections.groups && (
-          <div style={{ marginTop: '10px', pointerEvents: isLocked ? 'none' : 'auto' }}>
+          <div style={{ marginTop: '10px' }}>
             {uniqueGroups.map(group => (
               <div key={group} style={{ marginBottom: '5px' }}>
                 <button 
@@ -221,7 +219,14 @@ export default function Home() {
                   {group} {openGroups[group] ? '−' : '+'}
                 </button>
                 {openGroups[group] && (
-                  <div style={{ padding: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 6px 6px' }}>
+                  <div style={{ 
+                    padding: '10px', 
+                    backgroundColor: '#f8fafc', 
+                    border: '1px solid #e2e8f0', 
+                    borderTop: 'none', 
+                    borderRadius: '0 0 6px 6px',
+                    pointerEvents: isLocked ? 'none' : 'auto' // Endast tippa-knapparna låses
+                  }}>
                     {matches
                       .filter(m => teams.find(t => t.id === m.home_team)?.group_name === group)
                       .map(match => (
@@ -261,11 +266,16 @@ export default function Home() {
         </button>
 
         {openSections.playoffs && (
-          <div style={{ marginTop: '10px', pointerEvents: isLocked ? 'none' : 'auto' }}>
+          <div style={{ marginTop: '10px' }}>
             {STAGES.map(stage => (
               <div key={stage.id} style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#f0f9ff', borderRadius: '8px' }}>
                 <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>{stage.label} ({stage.count})</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(3, 1fr)', 
+                  gap: '6px',
+                  pointerEvents: isLocked ? 'none' : 'auto' // Endast val av lag låses
+                }}>
                   {teams.map(team => {
                     const isSelected = playoffPicks[stage.id].includes(team.id);
                     return (
@@ -297,16 +307,23 @@ export default function Home() {
           3. Specialare {openSections.tiebreakers ? '▲' : '▼'}
         </button>
         {openSections.tiebreakers && (
-          <div style={{ padding: '15px', backgroundColor: '#fffbeb', borderRadius: '0 0 8px 8px', border: '1px solid #fde68a', pointerEvents: isLocked ? 'none' : 'auto' }}>
-             <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Bronsvinnare</label>
-             <select value={tiebreakers.bronze} onChange={e => setTiebreakers({...tiebreakers, bronze: e.target.value})} style={{ width: '100%', padding: '10px', marginBottom: '10px' }}>
-               <option value="">Välj...</option>
-               {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-             </select>
-             <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Skyttekung</label>
-             <input type="text" value={tiebreakers.scorer} onChange={e => setTiebreakers({...tiebreakers, scorer: e.target.value})} style={{ width: '100%', padding: '10px', marginBottom: '10px' }} />
-             <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Totala mål</label>
-             <input type="number" value={tiebreakers.goals} onChange={e => setTiebreakers({...tiebreakers, goals: e.target.value})} style={{ width: '100%', padding: '10px' }} />
+          <div style={{ 
+            padding: '15px', 
+            backgroundColor: '#fffbeb', 
+            borderRadius: '0 0 8px 8px', 
+            border: '1px solid #fde68a'
+          }}>
+            <div style={{ pointerEvents: isLocked ? 'none' : 'auto' }}>
+               <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Bronsvinnare</label>
+               <select value={tiebreakers.bronze} onChange={e => setTiebreakers({...tiebreakers, bronze: e.target.value})} style={{ width: '100%', padding: '10px', marginBottom: '10px' }}>
+                 <option value="">Välj...</option>
+                 {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+               </select>
+               <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Skyttekung</label>
+               <input type="text" value={tiebreakers.scorer} onChange={e => setTiebreakers({...tiebreakers, scorer: e.target.value})} style={{ width: '100%', padding: '10px', marginBottom: '10px' }} />
+               <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Totala mål</label>
+               <input type="number" value={tiebreakers.goals} onChange={e => setTiebreakers({...tiebreakers, goals: e.target.value})} style={{ width: '100%', padding: '10px' }} />
+            </div>
           </div>
         )}
       </div>
