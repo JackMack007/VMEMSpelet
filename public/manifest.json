@@ -1,0 +1,21 @@
+{
+  "name": "Hagmans VM 2026 Tips",
+  "short_name": "VM Tips",
+  "description": "Tävla med kompisar i VM-tips 2026",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e3a8a",
+  "icons": [
+    {
+      "src": "/icon_192-182.png",
+      "sizes": "192x182",
+      "type": "image/png"
+    },
+	{
+      "src": "/icon_574-545-182.png",
+      "sizes": "574x545",
+      "type": "image/png"
+	}
+  ]
+}
