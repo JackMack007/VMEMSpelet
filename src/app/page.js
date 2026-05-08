@@ -179,11 +179,12 @@ export default function Home() {
           <LogoutButton />
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', margin: '15px 0' }}>
-          <Link href="/leaderboard" style={{ padding: '8px 15px', backgroundColor: '#2563eb', color: '#fff', textDecoration: 'none', borderRadius: '8px' }}>🏆 Rank</Link>
-          {isAdmin && <Link href="/admin" style={{ padding: '8px 15px', backgroundColor: '#64748b', color: '#fff', textDecoration: 'none', borderRadius: '8px' }}>⚙️ Admin</Link>}
+          <Link href="/leaderboard" style={{ padding: '8px 15px', backgroundColor: '#2563eb', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.9rem' }}>🏆 Rank</Link>
+          <Link href="/participants" style={{ padding: '8px 15px', backgroundColor: '#10b981', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.9rem' }}>👥 Alla Tips</Link>
+          {isAdmin && <Link href="/admin" style={{ padding: '8px 15px', backgroundColor: '#64748b', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.9rem' }}>⚙️ Admin</Link>}
         </div>
-        <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>Poäng: {totalPoints}</div>
-        {isLocked && <div style={{ color: 'red', fontWeight: 'bold', marginTop: '5px' }}>LÅST</div>}
+        <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2563eb' }}>Dina poäng: {totalPoints}</div>
+        {isLocked && <div style={{ color: 'red', fontWeight: 'bold', fontSize: '0.8rem', marginTop: '5px' }}>DITT TIPS ÄR LÅST</div>}
         {msg && <div style={{ color: '#2563eb', marginTop: '5px', fontSize: '0.8rem' }}>{msg}</div>}
       </header>
 
@@ -245,7 +246,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* 2. SLUTSPEL - Med återställd färglogik */}
+      {/* 2. SLUTSPEL */}
       <section style={{ marginBottom: '10px' }}>
         <button onClick={() => setOpenSections(p => ({ ...p, playoffs: !p.playoffs }))} style={{ width: '100%', padding: '15px', textAlign: 'left', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '8px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
           2. Slutspel {openSections.playoffs ? '▲' : '▼'}
