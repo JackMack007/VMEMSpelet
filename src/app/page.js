@@ -156,6 +156,9 @@ export default function Home() {
         <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', margin: '15px 0' }}>
           <Link href="/leaderboard" style={{ padding: '8px 15px', backgroundColor: '#2563eb', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.9rem' }}>🏆 Rank</Link>
           <Link href="/participants" style={{ padding: '8px 15px', backgroundColor: '#10b981', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.9rem' }}>👥 Alla Tips</Link>
+          {isAdmin && (
+            <Link href="/admin" style={{ padding: '8px 15px', backgroundColor: '#64748b', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontSize: '0.9rem' }}>⚙️ Admin</Link>
+          )}
         </div>
         <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2563eb' }}>Poäng: {totalPoints}</div>
         {isLocked && <div style={{ color: 'red', fontWeight: 'bold' }}>LÅST</div>}
@@ -182,7 +185,7 @@ export default function Home() {
                     {showTable[group] && <GroupTable groupName={group} teams={teams} matches={matches} />}
                     {matches.filter(m => teams.find(t => t.id === m.home_team)?.group_name === group).map(match => {
                       const userPick = groupTips[match.id];
-                      const actual = match.actual_result; // t.ex. '1', 'X' eller '2'
+                      const actual = match.actual_result;
                       const finished = !!actual;
                       return (
                         <div key={match.id} style={{ marginBottom: '15px', borderBottom: '1px solid #eee' }}>
