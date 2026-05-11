@@ -248,48 +248,91 @@ export default function Home() {
 
       {/* 2. SLUTSPEL */}
       <section style={{ marginBottom: '10px' }}>
-        <button onClick={() => setOpenSections(p => ({ ...p, playoffs: !p.playoffs }))} style={{ width: '100%', padding: '15px', textAlign: 'left', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '8px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
+        <button 
+          onClick={() => setOpenSections(p => ({ ...p, playoffs: !p.playoffs }))} 
+          style={{ width: '100%', padding: '15px', textAlign: 'left', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '8px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}
+        >
           2. Slutspel {openSections.playoffs ? '▲' : '▼'}
         </button>
         {openSections.playoffs && (
           <div style={{ marginTop: '10px' }}>
-            {STAGES.map(stage => (
-              <div key={stage.id} style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#f0f9ff', borderRadius: '8px' }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>{stage.label} ({playoffPicks[stage.id]?.length || 0}/{stage.count})</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-                  {teams.map(team => {
-                    const isSelected = playoffPicks[stage.id]?.includes(team.id.toString());
-                    const isActuallyAdvancing = actualPlayoffResults.some(r => r.stage === stage.id && r.team_id.toString() === team.id.toString());
-                    const stageHasAnyResults = actualPlayoffResults.some(r => r.stage === stage.id);
-                    
-                    let bg = '#fff', text = '#000', border = '1px solid #bae6fd';
+            {STAGES.map(stage => {
+              const groupNames = [...new Set(teams.map(t => t.group_name))].sort();
+              return (
+                <div key={stage.id} style={{ marginBottom: '20px', padding: '10px', backgroundColor: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #bae6fd', paddingBottom: '8px' }}>
+                    <h4 style={{ margin: 0, fontSize: '1.1rem', color: '#0369a1', fontWeight: 'bold' }}>{stage.label}</h4>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: playoffPicks[stage.id]?.length === stage.count ? '#16a34a' : '#64748b', backgroundColor: '#fff', padding: '2px 8px', borderRadius: '12px', border: '1px solid #bae6fd' }}>
+                      {playoffPicks[stage.id]?.length || 0} / {stage.count} valda
+                    </span>
+                  </div>
 
-                    if (isSelected) {
-                      if (stageHasAnyResults) {
-                        bg = isActuallyAdvancing ? '#16a34a' : '#2563eb';
-                        text = '#fff';
-                        border = isActuallyAdvancing ? '1px solid #16a34a' : '1px solid #2563eb';
-                      } else {
-                        bg = '#2563eb';
-                        text = '#fff';
-                        border = '1px solid #2563eb';
-                      }
-                    } else if (stageHasAnyResults && isActuallyAdvancing) {
-                      bg = 'rgba(220, 38, 38, 0.1)'; 
-                      text = '#dc2626';
-                      border = '1px dashed #dc2626';
-                    }
+                  {groupNames.map(group => (
+                    <div key={group} style={{ marginBottom: '18px' }}>
+                      <div style={{ 
+                        fontSize: '0.9rem', 
+                        fontWeight: '800', 
+                        color: '#1e293b', 
+                        marginBottom: '8px', 
+                        padding: '2px 8px',
+                        borderLeft: '4px solid #2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.05)'
+                      }}>
+                        Grupp {group}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                        {teams.filter(t => t.group_name === group).map(team => {
+                          const isSelected = playoffPicks[stage.id]?.includes(team.id.toString());
+                          const isActuallyAdvancing = actualPlayoffResults.some(r => r.stage === stage.id && r.team_id.toString() === team.id.toString());
+                          const stageHasAnyResults = actualPlayoffResults.some(r => r.stage === stage.id);
+                          
+                          let bg = '#fff', text = '#000', border = '1px solid #cbd5e0';
 
-                    return (
-                      <button key={team.id} onClick={() => togglePlayoffTeam(stage.id, team.id, stage.count)} 
-                        style={{ padding: '6px 2px', borderRadius: '4px', border: border, fontSize: '0.7rem', backgroundColor: bg, color: text, cursor: isLocked ? 'default' : 'pointer' }}>
-                        {team.name} ({team[`points_${stage.id}`] || 0}p)
-                      </button>
-                    );
-                  })}
+                          if (isSelected) {
+                            if (stageHasAnyResults) {
+                              bg = isActuallyAdvancing ? '#16a34a' : '#2563eb';
+                              text = '#fff';
+                              border = isActuallyAdvancing ? '1px solid #16a34a' : '1px solid #2563eb';
+                            } else {
+                              bg = '#2563eb';
+                              text = '#fff';
+                              border = '1px solid #2563eb';
+                            }
+                          } else if (stageHasAnyResults && isActuallyAdvancing) {
+                            bg = 'rgba(220, 38, 38, 0.1)'; 
+                            text = '#dc2626';
+                            border = '1px dashed #dc2626';
+                          }
+
+                          return (
+                            <button 
+                              key={team.id} 
+                              onClick={() => togglePlayoffTeam(stage.id, team.id, stage.count)} 
+                              style={{ 
+                                padding: '10px 4px', 
+                                borderRadius: '6px', 
+                                border: border, 
+                                fontSize: '0.75rem', 
+                                backgroundColor: bg, 
+                                color: text, 
+                                cursor: isLocked ? 'default' : 'pointer'
+                              }}
+                            >
+                              <div style={{ fontWeight: isSelected ? '800' : '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {team.name}
+                              </div>
+                              <div style={{ fontSize: '0.65rem', opacity: 0.9 }}>
+                                {team[`points_${stage.id}`] || 0}p
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
