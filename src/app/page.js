@@ -116,35 +116,49 @@ export default function Home() {
     }, { onConflict: 'user_id,match_id' });
   };
 
-  const togglePlayoffTeam = (stage, teamId, maxCount) => {
+  // KORRIGERAD: Nu med omedelbar lagring i databasen
+  const togglePlayoffTeam = async (stage, teamId, maxCount) => {
     if (isLocked) return;
     const teamIdStr = teamId.toString();
+    
     setPlayoffPicks(prev => {
       const current = prev[stage] || [];
-      if (current.includes(teamIdStr)) return { ...prev, [stage]: current.filter(id => id !== teamIdStr) };
-      if (current.length < maxCount) return { ...prev, [stage]: [...current, teamIdStr] };
-      return prev;
+      let newPicks;
+      
+      if (current.includes(teamIdStr)) {
+        newPicks = current.filter(id => id !== teamIdStr);
+      } else if (current.length < maxCount) {
+        newPicks = [...current, teamIdStr];
+      } else {
+        return prev; // Max antal nått, gör inget
+      }
+
+      const updatedPicks = { ...prev, [stage]: newPicks };
+      
+      // Spara ändringen i bakgrunden till Supabase
+      (async () => {
+        if (current.includes(teamIdStr)) {
+          await supabase.from('user_playoff_picks').delete().eq('user_id', user.id).eq('stage', stage).eq('team_id', teamId);
+        } else if (current.length < maxCount) {
+          await supabase.from('user_playoff_picks').insert({ user_id: user.id, stage, team_id: teamId });
+        }
+      })();
+
+      return updatedPicks;
     });
   };
 
   const handleSave = async () => {
     setLoading(true);
-    setMsg("Sparar...");
+    setMsg("Sparar specialare...");
     try {
-      await supabase.from('user_playoff_picks').delete().eq('user_id', user.id);
-      const picksToInsert = [];
-      Object.keys(playoffPicks).forEach(stage => {
-        playoffPicks[stage].forEach(teamId => {
-          picksToInsert.push({ user_id: user.id, stage, team_id: teamId });
-        });
-      });
-      if (picksToInsert.length > 0) await supabase.from('user_playoff_picks').insert(picksToInsert);
+      // Vi sparar tiebreakers här, playoff_picks sparas nu löpande via togglePlayoffTeam
       await supabase.from('profiles').update({
         tiebreaker_bronze: tiebreakers.bronze,
         tiebreaker_top_scorer: tiebreakers.scorer,
         tiebreaker_total_goals: parseInt(tiebreakers.goals) || 0
       }).eq('id', user.id);
-      setMsg("Allt sparat!");
+      setMsg("Specialare sparade!");
       setTimeout(() => setMsg(''), 2000);
     } catch (err) { setMsg("Fel: " + err.message); }
     finally { setLoading(false); }
