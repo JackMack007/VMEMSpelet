@@ -8,6 +8,7 @@ export default function AdminDashboard() {
   const [teams, setTeams] = useState([]);
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // States for nye data
   const [newTeam, setNewTeam] = useState({ id: '', name: '', group_name: '' });
@@ -18,7 +19,34 @@ export default function AdminDashboard() {
   const [editingMatch, setEditingMatch] = useState(null);
 
   useEffect(() => {
-    fetchData();
+    const checkAdmin = async () => {
+      // 1. Hämta aktuell användare
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (!user || authError) {
+        window.location.href = '/';
+        return;
+      }
+
+      // 2. Kontrollera admin-status i profiles-tabellen
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.is_admin) {
+        console.error("Ej behörig eller fel vid kontroll");
+        window.location.href = '/';
+        return;
+      }
+
+      // 3. Om vi nått hit är användaren admin
+      setIsAdmin(true);
+      fetchData();
+    };
+
+    checkAdmin();
   }, []);
 
   async function fetchData() {
@@ -127,7 +155,7 @@ export default function AdminDashboard() {
 
   const uniqueGroups = [...new Set(teams.map(t => t.group_name))].sort();
 
-  if (loading) return <div style={{ padding: '50px' }}>Laddar adminpanelen...</div>;
+  if (!isAdmin || loading) return <div style={{ padding: '50px' }}>Kontrollerar behörighet...</div>;
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px', fontFamily: 'sans-serif' }}>
@@ -141,6 +169,19 @@ export default function AdminDashboard() {
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <Link 
+            href="/admin/sync" 
+            style={{ 
+              background: '#2563eb', 
+              color: 'white', 
+              padding: '10px 20px', 
+              borderRadius: '8px', 
+              textDecoration: 'none',
+              fontWeight: 'bold' 
+            }}
+          >
+            Synka Resultat 🔄
+          </Link>
+          <Link 
             href="/admin/playoff" 
             style={{ 
               background: '#805ad5', 
@@ -151,7 +192,7 @@ export default function AdminDashboard() {
               fontWeight: 'bold' 
             }}
           >
-            Sluttspill & Odds 🏆
+            Slutspel & Poäng 🏆
           </Link>
           <Link 
             href="/admin/users" 
@@ -256,7 +297,6 @@ export default function AdminDashboard() {
                           <td style={{ fontSize: '0.8rem', width: '30px' }}>{m.id}</td>
                           <td style={{ fontSize: '0.85rem', width: '100px' }}>{formatStaticTime(m.match_date)}</td>
                           <td style={{ fontWeight: '500' }}>{m.home_team} - {m.away_team}</td>
-                          {/* NY KOLUMN FÖR POÄNG */}
                           <td style={{ textAlign: 'center', fontSize: '0.85rem', color: '#2563eb' }}>
                             {m.points_1} - {m.points_x} - {m.points_2}
                           </td>

@@ -1,20 +1,49 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../../utils/supabaseClient';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function UserAdmin() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    const checkAdmin = async () => {
+      // 1. Hämta aktuell användare
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (!user || authError) {
+        router.push('/');
+        return;
+      }
+
+      // 2. Kontrollera admin-status i profiles-tabellen
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.is_admin) {
+        console.error("Ej behörig eller fel vid kontroll");
+        router.push('/');
+        return;
+      }
+
+      // 3. Om vi nått hit är användaren admin
+      setIsAdmin(true);
+      fetchUsers();
+    };
+
+    checkAdmin();
+  }, [router]);
 
   async function fetchUsers() {
     setLoading(true);
     try {
-      // Vi hämtar ALLA kolumner för att kunna debugga ordentligt
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -23,8 +52,6 @@ export default function UserAdmin() {
       if (error) {
         console.error("Fel vid hämtning av användare:", error.message);
       } else {
-        // Logga ut datan i konsolen (F12) så att du kan se om den nya användaren finns där
-        console.log("Hämtade profiler från databasen:", data);
         setProfiles(data || []);
       }
     } catch (err) {
@@ -47,15 +74,18 @@ export default function UserAdmin() {
     } else {
       fetchUsers();
     }
-  };
+  }
 
-  if (loading) return <div style={{ padding: '50px' }}>Laddar användarlista...</div>;
+  // Visa laddningsläge tills admin-status är bekräftad
+  if (!isAdmin || loading) return <div style={{ padding: '50px' }}>Kontrollerar behörighet...</div>;
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '40px', fontFamily: 'sans-serif' }}>
-      <header style={{ marginBottom: '40px', borderBottom: '2px solid #eee', paddingBottom: '20px' }}>
-        <h1>Användaradministration</h1>
-        <Link href="/admin">← Tillbaka till Adminpanelen</Link>
+      <header style={{ marginBottom: '40px', borderBottom: '2px solid #eee', paddingBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1>Användaradministration</h1>
+          <Link href="/admin" style={{ color: '#2563eb', fontWeight: 'bold', textDecoration: 'none' }}>← Tillbaka till Adminpanelen</Link>
+        </div>
       </header>
 
       <section style={{ background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>

@@ -8,6 +8,7 @@ export default function PlayoffAdmin() {
   const [teams, setTeams] = useState([]);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false); // Nytt state för säkerhet
 
   const STAGES = [
     { id: '16th', label: '16-delsfinal', count: 32 },
@@ -19,7 +20,33 @@ export default function PlayoffAdmin() {
   ];
 
   useEffect(() => {
-    fetchInitialData();
+    const checkAdmin = async () => {
+      // 1. Hämta aktuell användare
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (!user || authError) {
+        window.location.href = '/';
+        return;
+      }
+
+      // 2. Kontrollera admin-status i profiles-tabellen
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.is_admin) {
+        window.location.href = '/';
+        return;
+      }
+
+      // 3. Om vi nått hit är användaren admin, hämta datan
+      setIsAdmin(true);
+      fetchInitialData();
+    };
+
+    checkAdmin();
   }, []);
 
   async function fetchInitialData() {
@@ -49,7 +76,7 @@ export default function PlayoffAdmin() {
   const toggleOfficialResult = async (stage, teamId) => {
     const existingResult = results.find(r => r.stage === stage && r.team_id === teamId);
     
-    // OPTIMISTISK UPPDATERING: Uppdatera UI direkt för att det ska kännas snabbt
+    // OPTIMISTISK UPPDATERING
     if (existingResult) {
       setResults(results.filter(r => !(r.stage === stage && r.team_id === teamId)));
     } else {
@@ -70,11 +97,12 @@ export default function PlayoffAdmin() {
       }
     } catch (err) {
       alert("Kunde inte spara i databasen: " + err.message);
-      await refreshData(); // Återställ till faktiskt databas-läge om det sket sig
+      await refreshData();
     }
   };
 
-  if (loading) return <div style={{ padding: '50px' }}>Laddar slutspel...</div>;
+  // Visa laddningsmeddelande tills admin-status är bekräftad
+  if (!isAdmin || loading) return <div style={{ padding: '50px' }}>Kontrollerar behörighet...</div>;
 
   return (
     <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '40px', fontFamily: 'sans-serif' }}>
