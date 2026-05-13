@@ -5,7 +5,7 @@ import Link from 'next/link';
 
 export default function AdminSync() {
   const [dbMatches, setDbMatches] = useState([]);
-  const [apiResults, setApiResults] = useState({}); // Lagrar API-resultat temporärt { matchId: "2-1" }
+  const [apiResults, setApiResults] = useState({}); // Lagrar API-resultat temporärt
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
@@ -50,10 +50,26 @@ export default function AdminSync() {
 
   const getResultSign = (h, a) => (h > a ? '1' : h < a ? '2' : 'X');
 
-  // --- STEG 1: BARA HÄMTA FRÅN API (Ingen DB-ändring) ---
+  // Hjälpfunktion för att formatera UTC-tid till läsbart svenskt format
+  const formatUtcDate = (utcString) => {
+    if (!utcString) return '-';
+    try {
+      const date = new Date(utcString);
+      return date.toLocaleString('sv-SE', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return utcString;
+    }
+  };
+
+  // --- STEG 1: HÄMTA UTÖKAD DATA FRÅN API ---
   const fetchFromApi = async () => {
     setLoading(true);
-    addLog("Hämtar senaste resultat från API...");
+    addLog("Hämtar matchinfo, resultat och runda från API...");
     try {
       const res = await fetch('/api/sync?type=matches');
       const apiMatches = await res.json();
@@ -62,24 +78,27 @@ export default function AdminSync() {
 
       const resultsMap = {};
       apiMatches.forEach(am => {
-        if (am.home_score !== null) {
-          resultsMap[am.id.toString()] = {
-            score: `${am.home_score}-${am.away_score}`,
-            sign: getResultSign(am.home_score, am.away_score)
-          };
-        }
+        resultsMap[am.id.toString()] = {
+          score: am.home_score !== null ? `${am.home_score}-${am.away_score}` : null,
+          sign: am.home_score !== null ? getResultSign(am.home_score, am.away_score) : null,
+          stadium: am.stadium,
+          city: am.stadium_city,
+          status: am.status,
+          kickoff: am.kickoff_utc,
+          round: am.round // Inkluderar runda (t.ex. Group Stage eller Round of 16)
+        };
       });
 
       setApiResults(resultsMap);
       setHasFetched(true);
-      addLog(`Hämtat resultat för ${Object.keys(resultsMap).length} matcher. Se tabellen nedan.`);
+      addLog(`Hämtat data för ${Object.keys(resultsMap).length} matcher. Kontrollera runda och DIFF.`);
     } catch (err) {
       addLog("FEL: " + err.message);
     }
     setLoading(false);
   };
 
-  // --- STEG 2: SYNKA TILL DATABAS (Skriver över m.score_text) ---
+  // --- STEG 2: SYNKA TILL DATABAS ---
   const syncToDatabase = async () => {
     if (!confirm("Vill du skriva över dina manuella resultat med API-datan?")) return;
     
@@ -90,7 +109,7 @@ export default function AdminSync() {
     try {
       for (const m of dbMatches) {
         const apiData = apiResults[m.api_id];
-        if (apiData && apiData.score !== m.score_text) {
+        if (apiData?.score && apiData.score !== m.score_text) {
           const { error } = await supabase
             .from('matches')
             .update({ 
@@ -103,23 +122,22 @@ export default function AdminSync() {
         }
       }
       addLog(`Synk klar! Uppdaterade ${updateCount} matcher i databasen.`);
-      fetchDbMatches(); // Uppdatera vyn
+      fetchDbMatches();
     } catch (err) {
       addLog("FEL vid sparning: " + err.message);
     }
     setLoading(false);
   };
 
-  // Visa inget förrän vi vet att användaren är admin
   if (!isAdmin) return <div style={{ padding: '50px' }}>Kontrollerar behörighet...</div>;
 
   return (
-    <div style={{ padding: '20px', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif' }}>
       <header style={{ borderBottom: '2px solid #eee', marginBottom: '20px', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2>🔄 Resultat-kontroll</h2>
+          <h2>🔄 Resultat-kontroll 2.1</h2>
           <h5 style={{ fontWeight: 'normal', color: '#64748b', margin: '5px 0' }}>
-            Kopplat mot api.wc2026api.com. Hämta resultat först, kontrollera DIFF, synka sedan till databasen.
+            Hämtar live resultat. Hämta från API först och kontrollera data. Därefter Synka till Databas för att uppdatera tipsarena. Det är bara Resultat som uppdateras (API Förslag).
           </h5>
         </div>
         <Link href="/admin" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 'bold' }}>← Tillbaka</Link>
@@ -147,42 +165,67 @@ export default function AdminSync() {
         </section>
 
         {/* SYSTEMLOGG */}
-        <div style={{ backgroundColor: '#0f172a', color: '#38bdf8', padding: '15px', borderRadius: '8px', height: '150px', overflowY: 'auto', fontSize: '0.8rem', fontFamily: 'monospace' }}>
+        <div style={{ backgroundColor: '#0f172a', color: '#38bdf8', padding: '15px', borderRadius: '8px', height: '120px', overflowY: 'auto', fontSize: '0.8rem', fontFamily: 'monospace' }}>
           {logs.map((log, i) => <div key={i} style={{ borderBottom: '1px solid #1e293b', padding: '2px 0' }}>{log}</div>)}
         </div>
 
         {/* MATCHTABELL */}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ textAlign: 'left', borderBottom: '2px solid #eee', color: '#64748b' }}>
+            <tr style={{ textAlign: 'left', borderBottom: '2px solid #eee', color: '#64748b', fontSize: '0.85rem' }}>
               <th style={{ padding: '12px' }}>Match</th>
+              <th style={{ padding: '12px' }}>Runda</th>
+              <th style={{ padding: '12px' }}>Avspark (UTC)</th>
+              <th style={{ padding: '12px' }}>Arena & Stad</th>
+              <th style={{ padding: '12px' }}>Status</th>
               <th style={{ padding: '12px' }}>Nuvarande (DB)</th>
               <th style={{ padding: '12px' }}>API Förslag</th>
-              <th style={{ padding: '12px' }}>Status</th>
+              <th style={{ padding: '12px' }}></th>
             </tr>
           </thead>
           <tbody>
             {dbMatches.map(m => {
-              const apiMatch = apiResults[m.api_id];
-              const isDifferent = apiMatch && apiMatch.score !== m.score_text;
+              const api = apiResults[m.api_id];
+              const isDifferent = api?.score && api.score !== m.score_text;
 
               return (
                 <tr key={m.id} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: isDifferent ? '#fffbeb' : 'transparent' }}>
                   <td style={{ padding: '12px', fontWeight: '500' }}>{m.home_team} - {m.away_team}</td>
+                  <td style={{ padding: '12px', fontSize: '0.8rem', color: '#1e40af' }}>
+                    {api?.round || '-'}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '0.85rem' }}>
+                    {api ? formatUtcDate(api.kickoff) : '-'}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '0.75rem', color: '#475569' }}>
+                    {api?.stadium ? `${api.stadium}, ${api.city}` : '-'}
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    {api && (
+                      <span style={{ 
+                        padding: '2px 6px', 
+                        borderRadius: '4px', 
+                        fontSize: '0.7rem',
+                        textTransform: 'uppercase',
+                        backgroundColor: api.status === 'finished' ? '#dcfce7' : api.status === 'live' ? '#fee2e2' : '#f1f5f9',
+                        color: api.status === 'finished' ? '#166534' : api.status === 'live' ? '#991b1b' : '#475569'
+                      }}>
+                        {api.status}
+                      </span>
+                    )}
+                  </td>
                   <td style={{ padding: '12px', color: '#64748b' }}>{m.score_text || '-'}</td>
                   <td style={{ padding: '12px' }}>
-                    {apiMatch ? (
-                      <span style={{ color: '#2563eb', fontWeight: 'bold' }}>{apiMatch.score}</span>
+                    {api?.score ? (
+                      <span style={{ color: '#2563eb', fontWeight: 'bold' }}>{api.score}</span>
                     ) : (
-                      <span style={{ color: '#cbd5e1' }}>Inget resultat</span>
+                      <span style={{ color: '#cbd5e1' }}>-</span>
                     )}
                   </td>
                   <td style={{ padding: '12px' }}>
-                    {isDifferent ? (
+                    {isDifferent && (
                       <span style={{ color: '#d97706', fontSize: '0.75rem', fontWeight: 'bold' }}>⚠️ DIFF</span>
-                    ) : apiMatch ? (
-                      <span style={{ color: '#16a34a', fontSize: '0.75rem' }}>✅ Matchar</span>
-                    ) : null}
+                    )}
                   </td>
                 </tr>
               );
