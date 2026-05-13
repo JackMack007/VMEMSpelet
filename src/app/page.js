@@ -25,12 +25,37 @@ export default function Home() {
     { id: 'gold', label: 'Världsmästare', count: 1 }
   ];
 
+  // --- NYTT: STATES FÖR VIEW-MINNE ---
   const [openSections, setOpenSections] = useState({ groups: true, playoffs: false, tiebreakers: false });
   const [openGroups, setOpenGroups] = useState({});
   const [showTable, setShowTable] = useState({});
+  const [isReady, setIsReady] = useState(false); // Hindrar overwrite vid första load
+
   const [groupTips, setGroupTips] = useState({});
   const [playoffPicks, setPlayoffPicks] = useState({ '16th': [], '8th': [], 'quarter': [], 'semi': [], 'final': [], 'gold': [] });
   const [tiebreakers, setTiebreakers] = useState({ bronze: '', scorer: '', goals: '' });
+
+  // 1. Ladda minne vid start
+  useEffect(() => {
+    const savedSections = localStorage.getItem('vm_open_sections');
+    const savedGroups = localStorage.getItem('vm_open_groups');
+    const savedTables = localStorage.getItem('vm_show_tables');
+
+    if (savedSections) setOpenSections(JSON.parse(savedSections));
+    if (savedGroups) setOpenGroups(JSON.parse(savedGroups));
+    if (savedTables) setShowTable(JSON.parse(savedTables));
+    
+    setIsReady(true);
+  }, []);
+
+  // 2. Spara minne vid ändring
+  useEffect(() => {
+    if (isReady) {
+      localStorage.setItem('vm_open_sections', JSON.stringify(openSections));
+      localStorage.setItem('vm_open_groups', JSON.stringify(openGroups));
+      localStorage.setItem('vm_show_tables', JSON.stringify(showTable));
+    }
+  }, [openSections, openGroups, showTable, isReady]);
 
   useEffect(() => {
     async function initApp() {
