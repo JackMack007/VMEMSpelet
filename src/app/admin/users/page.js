@@ -12,7 +12,6 @@ export default function UserAdmin() {
 
   useEffect(() => {
     const checkAdmin = async () => {
-      // 1. Hämta aktuell användare
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
       if (!user || authError) {
@@ -20,7 +19,6 @@ export default function UserAdmin() {
         return;
       }
 
-      // 2. Kontrollera admin-status i profiles-tabellen
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('is_admin')
@@ -33,7 +31,6 @@ export default function UserAdmin() {
         return;
       }
 
-      // 3. Om vi nått hit är användaren admin
       setIsAdmin(true);
       fetchUsers();
     };
@@ -61,9 +58,13 @@ export default function UserAdmin() {
     }
   }
 
-  const unlockUserTips = async (targetUserId) => {
-    if (!confirm("Vill du låsa upp tipsformuläret för denna användare?")) return;
+  const unlockUserTips = async (targetUserId, name) => {
+    if (!confirm(`Vill du låsa upp tipsformuläret för ${name}?`)) return;
     
+    // Optimistisk uppdatering i UI
+    const originalProfiles = [...profiles];
+    setProfiles(prev => prev.map(p => p.id === targetUserId ? { ...p, is_submitted: false } : p));
+
     const { error } = await supabase
       .from('profiles')
       .update({ is_submitted: false })
@@ -71,12 +72,13 @@ export default function UserAdmin() {
 
     if (error) {
       alert("Kunde inte låsa upp: " + error.message);
+      setProfiles(originalProfiles); // Ångra UI-ändring vid fel
     } else {
-      fetchUsers();
+      alert(`Tips upplåst för ${name}!`);
+      fetchUsers(); // Uppdatera listan på riktigt
     }
   }
 
-  // Visa laddningsläge tills admin-status är bekräftad
   if (!isAdmin || loading) return <div style={{ padding: '50px' }}>Kontrollerar behörighet...</div>;
 
   return (
@@ -90,7 +92,7 @@ export default function UserAdmin() {
 
       <section style={{ background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
         {profiles.length === 0 ? (
-          <p>Inga användare hittades i tabellen 'profiles'.</p>
+          <p>Inga användare hittades.</p>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -103,24 +105,29 @@ export default function UserAdmin() {
             <tbody>
               {profiles.map(p => (
                 <tr key={p.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ padding: '12px' }}>{p.full_name || p.id}</td>
+                  <td style={{ padding: '12px' }}>
+                    {p.full_name || "Namnlös"} <br/>
+                    <small style={{ color: '#64748b' }}>{p.id}</small>
+                  </td>
                   <td style={{ padding: '12px' }}>
                     {p.is_submitted ? 
-                      <span style={{ color: '#e53e3e', fontWeight: 'bold' }}>✅ Inskickat (Låst)</span> : 
-                      <span style={{ color: '#3182ce' }}>⏳ Öppen</span>
+                      <span style={{ color: '#e53e3e', fontWeight: 'bold', backgroundColor: '#fff5f5', padding: '4px 8px', borderRadius: '4px' }}>✅ Inskickat (Låst)</span> : 
+                      <span style={{ color: '#3182ce', backgroundColor: '#ebf8ff', padding: '4px 8px', borderRadius: '4px' }}>⏳ Öppen</span>
                     }
                   </td>
                   <td style={{ padding: '12px' }}>
                     {p.is_submitted && (
                       <button 
-                        onClick={() => unlockUserTips(p.id)}
+                        onClick={() => unlockUserTips(p.id, p.full_name)}
                         style={{ 
                           background: '#3182ce', 
                           color: 'white', 
                           border: 'none', 
                           borderRadius: '4px', 
-                          padding: '6px 12px', 
-                          cursor: 'pointer' 
+                          padding: '8px 16px', 
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                         }}
                       >
                         Lås upp tips
@@ -134,8 +141,8 @@ export default function UserAdmin() {
         )}
       </section>
       
-      <div style={{ marginTop: '20px', fontSize: '0.8rem', color: '#64748b' }}>
-        <p>Tips: Om en ny användare saknas, kontrollera att SQL-triggern i Supabase kördes korrekt vid registrering.</p>
+      <div style={{ marginTop: '20px', fontSize: '0.8rem', color: '#64748b', backgroundColor: '#fffbeb', padding: '15px', borderRadius: '8px', border: '1px solid #fef3c7' }}>
+        <p><strong>Admin-instruktion:</strong> Genom att klicka på "Lås upp" ändras användarens status så att de återigen kan ändra sina tips och specialare. Glöm inte att be användaren att klicka på "LÅS TIPS" igen när de är färdiga!</p>
       </div>
     </div>
   );
