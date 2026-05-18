@@ -131,6 +131,7 @@ export default function Home() {
     if (!isAlreadySelected && currentPicks.length >= maxCount) return;
 
     const newPicks = isAlreadySelected ? currentPicks.filter(id => id !== teamIdStr) : [...currentPicks, teamIdStr];
+    setOpenSections(prev => ({ ...prev })); // Behåller befintlig state-struktur intakt
     setPlayoffPicks(prev => ({ ...prev, [stage]: newPicks }));
 
     try {
@@ -147,13 +148,29 @@ export default function Home() {
     }
   };
 
+  // --- UPPDATERAD: TVINGAR TOMMA STRÄNGAR TILL NULL FÖR ATT UNDVIKA 409 CONFLICT OCH NaN ---
   const handleSave = async () => {
     setLoading(true);
     try {
-      await supabase.from('profiles').update({ tiebreaker_bronze: tiebreakers.bronze, tiebreaker_top_scorer: tiebreakers.scorer, tiebreaker_total_goals: parseInt(tiebreakers.goals) || 0 }).eq('id', user.id);
+      const cleanData = {
+        tiebreaker_bronze: tiebreakers.bronze === "" ? null : tiebreakers.bronze,
+        tiebreaker_top_scorer: tiebreakers.scorer === "" ? null : tiebreakers.scorer,
+        tiebreaker_total_goals: tiebreakers.goals === "" ? null : (parseInt(tiebreakers.goals) || 0)
+      };
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(cleanData)
+        .eq('id', user.id);
+
+      if (error) throw error;
+
       setMsg("Sparat!");
-    } catch (err) { setMsg("Fel!"); }
-    finally { setLoading(false); setTimeout(() => setMsg(''), 2000); }
+    } catch (err) { 
+      console.error("Detta gick fel i Supabase:", err);
+      setMsg("Fel: " + (err.message || "Kunde inte spara")); 
+    }
+    finally { setLoading(false); setTimeout(() => setMsg(''), 4000); }
   };
 
   const getTeamName = (teamId) => teams.find(t => t.id.toString() === teamId.toString())?.name || teamId;
@@ -324,7 +341,7 @@ export default function Home() {
       {!isLocked && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '15px', backgroundColor: '#fff', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', display: 'flex', gap: '10px', zIndex: 100 }}>
           <button onClick={handleSave} style={{ flex: 1, padding: '12px', backgroundColor: '#64748b', color: '#fff', borderRadius: '8px', fontWeight: 'bold' }}>SPARA</button>
-          <button onClick={() => { if(confirm("Vill du låsa?")) { handleSave(); supabase.from('profiles').update({ is_submitted: true }).eq('id', user.id).then(() => setIsLocked(true)); } }} style={{ flex: 1, padding: '12px', backgroundColor: '#1e3a8a', color: '#fff', borderRadius: '8px', fontWeight: 'bold' }}>LÅS TIPS</button>
+          <button onClick={() => { if(confirm("Vill du låsa?")) { handleSave(); supabase.from('profiles').update({ is_submitted: true }).eq('id', user.id).then(() => setIsLocked(true)); } }} style={{ flex: 1, padding: '12px', backgroundColor: '#1e3a8a', color: '#fff', borderRadius: '8px', fontWeight: 'bold' }}>SKICKA IN</button>
         </div>
       )}
     </div>
