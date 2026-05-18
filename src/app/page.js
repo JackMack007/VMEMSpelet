@@ -131,7 +131,6 @@ export default function Home() {
     if (!isAlreadySelected && currentPicks.length >= maxCount) return;
 
     const newPicks = isAlreadySelected ? currentPicks.filter(id => id !== teamIdStr) : [...currentPicks, teamIdStr];
-    setOpenSections(prev => ({ ...prev })); // Behåller befintlig state-struktur intakt
     setPlayoffPicks(prev => ({ ...prev, [stage]: newPicks }));
 
     try {
@@ -148,7 +147,6 @@ export default function Home() {
     }
   };
 
-  // --- UPPDATERAD: TVINGAR TOMMA STRÄNGAR TILL NULL FÖR ATT UNDVIKA 409 CONFLICT OCH NaN ---
   const handleSave = async () => {
     setLoading(true);
     try {
@@ -171,6 +169,66 @@ export default function Home() {
       setMsg("Fel: " + (err.message || "Kunde inte spara")); 
     }
     finally { setLoading(false); setTimeout(() => setMsg(''), 4000); }
+  };
+
+  // --- NYTT: VALIDERINGSFUNKTION INNAN INSKICK ---
+  const handleFinalSubmit = async () => {
+    // 1. Kontrollera Gruppspel (Antal lagda tips måste matcha totalt antal matcher)
+    const totalMatchesCount = matches.length;
+    const userMatchesCount = Object.keys(groupTips).filter(key => groupTips[key]).length;
+    
+    if (userMatchesCount < totalMatchesCount) {
+      const missing = totalMatchesCount - userMatchesCount;
+      const errorStr = `Du har inte tippat alla matcher i gruppspelet. (${missing} kvar)`;
+      alert(errorStr);
+      setMsg(errorStr);
+      return;
+    }
+
+    // 2. Kontrollera Slutspel (Måste ha valt exakt rätt antal lag för varje enskilt stadie)
+    for (const stage of STAGES) {
+      const stagePicksCount = playoffPicks[stage.id]?.length || 0;
+      if (stagePicksCount !== stage.count) {
+        const errorStr = `Du måste välja exakt ${stage.count} lag i sektionen "${stage.label}". (Du har valt ${stagePicksCount})`;
+        alert(errorStr);
+        setMsg(errorStr);
+        return;
+      }
+    }
+
+    // 3. Kontrollera Specialare (Får inte vara tomma)
+    if (!tiebreakers.bronze || !tiebreakers.scorer || !tiebreakers.goals || tiebreakers.goals === "") {
+      const errorStr = "Du måste besvara alla frågor under sektion 3. Specialare.";
+      alert(errorStr);
+      setMsg(errorStr);
+      return;
+    }
+
+    // 4. Om alla kontroller godkänns, kör den slutgiltiga låsningen
+    if (confirm("Vill du låsa ditt tips? Efter detta kan du inte göra några fler ändringar.")) {
+      setLoading(true);
+      try {
+        // Kör en sista sparning av specialarna först
+        const cleanData = {
+          tiebreaker_bronze: tiebreakers.bronze === "" ? null : tiebreakers.bronze,
+          tiebreaker_top_scorer: tiebreakers.scorer === "" ? null : tiebreakers.scorer,
+          tiebreaker_total_goals: tiebreakers.goals === "" ? null : (parseInt(tiebreakers.goals) || 0)
+        };
+        await supabase.from('profiles').update(cleanData).eq('id', user.id);
+
+        // Sätt is_submitted till true
+        const { error } = await supabase.from('profiles').update({ is_submitted: true }).eq('id', user.id);
+        if (error) throw error;
+
+        setIsLocked(true);
+        setMsg("Ditt tips har skickats in och låsts!");
+      } catch (err) {
+        console.error(err);
+        setMsg("Kunde inte låsa tips.");
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   const getTeamName = (teamId) => teams.find(t => t.id.toString() === teamId.toString())?.name || teamId;
@@ -204,7 +262,7 @@ export default function Home() {
         </div>
         <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2563eb' }}>Poäng: {totalPoints}</div>
         {isLocked && <div style={{ color: 'red', fontWeight: 'bold' }}>LÅST</div>}
-        {msg && <div style={{ color: '#16a34a', fontWeight: 'bold', fontSize: '0.8rem' }}>{msg}</div>}
+        {msg && <div style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '0.85rem', backgroundColor: '#fef2f2', padding: '8px', borderRadius: '6px', marginTop: '10px', border: '1px solid #fee2e2' }}><span style={{ color: msg.includes('låsts') || msg.includes('Sparat') ? '#16a34a' : '#dc2626' }}>{msg}</span></div>}
       </header>
 
       {/* 1. GRUPPSPEL */}
@@ -341,7 +399,7 @@ export default function Home() {
       {!isLocked && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '15px', backgroundColor: '#fff', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', display: 'flex', gap: '10px', zIndex: 100 }}>
           <button onClick={handleSave} style={{ flex: 1, padding: '12px', backgroundColor: '#64748b', color: '#fff', borderRadius: '8px', fontWeight: 'bold' }}>SPARA</button>
-          <button onClick={() => { if(confirm("Vill du låsa?")) { handleSave(); supabase.from('profiles').update({ is_submitted: true }).eq('id', user.id).then(() => setIsLocked(true)); } }} style={{ flex: 1, padding: '12px', backgroundColor: '#1e3a8a', color: '#fff', borderRadius: '8px', fontWeight: 'bold' }}>SKICKA IN</button>
+          <button onClick={handleFinalSubmit} style={{ flex: 1, padding: '12px', backgroundColor: '#1e3a8a', color: '#fff', borderRadius: '8px', fontWeight: 'bold' }}>SKICKA IN</button>
         </div>
       )}
     </div>
